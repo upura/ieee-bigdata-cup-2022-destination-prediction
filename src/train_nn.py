@@ -106,18 +106,6 @@ class TabularDataset(Dataset):
         self.target_col = target_col
         self.is_train = is_train
         self.num_classes = num_classes
-        zone_features = pd.read_csv(
-            "../input/ieee-bigdata-prepare-dataset/zone_features.csv"
-        )
-        # concat zone features
-        self.df = pd.merge(self.df, zone_features, left_on="Origin", right_on="ZONE_ID")
-        self.df = pd.merge(
-            self.df,
-            zone_features,
-            left_on="Destination",
-            right_on="ZONE_ID",
-            suffixes=("_ori", "_des"),
-        )
 
         if self.is_train:
             self.X = self.df.drop(self.target_col, axis=1).copy()
@@ -247,7 +235,7 @@ class MyModel(nn.Module):
         self.cat_dims = cat_dims
         self.cat_embeddings = nn.ModuleList(
             [
-                nn.Embedding(self.cat_dims[idx], self.emb_dim, padding_idx=0)
+                nn.Embedding(self.cat_dims[idx], self.emb_dim)
                 for idx in range(len(self.categorical_cols))
             ]
         )
@@ -379,5 +367,6 @@ if __name__ == "__main__":
 
     y_val_pred = torch.cat(trainer.predict(model, datamodule.val_dataloader()))
     np.save(f"y_val_pred_fold{fold}", y_val_pred.to("cpu").detach().numpy())
-#     y_test_pred = torch.cat(trainer.predict(model, datamodule.test_dataloader()))
-#     np.save(f"y_test_pred_fold{fold}", y_test_pred.to("cpu").detach().numpy())
+
+    y_test_pred = torch.cat(trainer.predict(model, datamodule.test_dataloader()))
+    np.save(f"y_test_pred_fold{fold}", y_test_pred.to("cpu").detach().numpy())

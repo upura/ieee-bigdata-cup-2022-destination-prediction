@@ -1,3 +1,5 @@
+import gc
+
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder, QuantileTransformer
 
@@ -35,6 +37,21 @@ def create_train_df(input_df):
     return pd.concat([output_df, input_df_neg]).reset_index(drop=True)
 
 
+def merge_zone_feat(input_df, zone_df):
+    output_df = input_df.copy()
+    output_df = pd.merge(
+        output_df, zone_df, left_on="Origin", right_on="ZONE_ID", how="inner"
+    )
+    output_df = pd.merge(
+        output_df,
+        zone_df,
+        left_on="Destination",
+        right_on="ZONE_ID",
+        suffixes=("_ori", "_des"),
+    )
+    return output_df
+
+
 if __name__ == "__main__":
     train_tokyo = pd.read_csv(
         "../input/ieee-bigdata-cup-2022-destination-prediction/train/train/Tokyo.csv"
@@ -68,23 +85,28 @@ if __name__ == "__main__":
     )
     # ((211518, 8), (52470, 8), (95345, 8), (10638, 8))
 
-    tokyo_feat = pd.read_csv(
-        "../input/ieee-bigdata-cup-2022-destination-prediction/Zone_features/Zone_features/Tokyo_zone_feature_area.csv"
-    )
-    chukyo_feat = pd.read_csv(
-        "../input/ieee-bigdata-cup-2022-destination-prediction/Zone_features/Zone_features/Chukyo_zone_feature_area.csv"
-    )
-    kyushu_feat = pd.read_csv(
-        "../input/ieee-bigdata-cup-2022-destination-prediction/Zone_features/Zone_features/Kyushu_zone_feature_area.csv"
-    )
-    higashisurugawan_feat = pd.read_csv(
-        "../input/ieee-bigdata-cup-2022-destination-prediction/Zone_features/Zone_features/Higashisurugawan_zone_feature_area.csv"
-    )
-    test_feat = pd.read_csv(
-        "../input/ieee-bigdata-cup-2022-destination-prediction/Zone_features/Zone_features/Kinki_zone_feature_area.csv"
-    )
-    feat_df = pd.concat(
-        [tokyo_feat, chukyo_feat, kyushu_feat, higashisurugawan_feat, test_feat]
+    feat_df = (
+        pd.concat(
+            [
+                pd.read_csv(
+                    "../input/ieee-bigdata-cup-2022-destination-prediction/Zone_features/Zone_features/Tokyo_zone_feature_area.csv"
+                ),
+                pd.read_csv(
+                    "../input/ieee-bigdata-cup-2022-destination-prediction/Zone_features/Zone_features/Chukyo_zone_feature_area.csv"
+                ),
+                pd.read_csv(
+                    "../input/ieee-bigdata-cup-2022-destination-prediction/Zone_features/Zone_features/Kyushu_zone_feature_area.csv"
+                ),
+                pd.read_csv(
+                    "../input/ieee-bigdata-cup-2022-destination-prediction/Zone_features/Zone_features/Higashisurugawan_zone_feature_area.csv"
+                ),
+                pd.read_csv(
+                    "../input/ieee-bigdata-cup-2022-destination-prediction/Zone_features/Zone_features/Kinki_zone_feature_area.csv"
+                ),
+            ]
+        )
+        .drop_duplicates(subset=["ZONE_ID"])
+        .reset_index(drop=True)
     )
     num_cols = ["T000918002", "T000918006", "T000918021", "T000918025", "T000847001"]
     prep = QuantileTransformer(output_distribution="normal")
@@ -119,9 +141,37 @@ if __name__ == "__main__":
     train_kyushu = create_train_df(train_kyushu)
     train_higashisurugawan = create_train_df(train_higashisurugawan)
 
+    train_tokyo = merge_zone_feat(train_tokyo, feat_df)
+    train_chukyo = merge_zone_feat(train_chukyo, feat_df)
+    train_kyushu = merge_zone_feat(train_kyushu, feat_df)
+    train_higashisurugawan = merge_zone_feat(train_higashisurugawan, feat_df)
+
     train_tokyo.to_csv("train_tokyo.csv", index=False)
     train_chukyo.to_csv("train_chukyo.csv", index=False)
     train_kyushu.to_csv("train_kyushu.csv", index=False)
     train_higashisurugawan.to_csv("train_higashisurugawan.csv", index=False)
+
+    print(
+        train_tokyo.shape,
+        train_chukyo.shape,
+        train_kyushu.shape,
+        train_higashisurugawan.shape,
+        test.shape,
+    )
+    del train_tokyo, train_chukyo, train_kyushu, train_higashisurugawan, train_test
+    gc.collect()
+
+    top_two_zone = test["Origin"].value_counts().index[:2]
+    test_ori = test.copy()
+    test_ori["Destination"] = test_ori["Origin"]
+    test_top1 = test.copy()
+    test_top1["Destination"] = top_two_zone[0]
+    test_top2 = test.copy()
+    test_top2["Destination"] = top_two_zone[1]
+    test = (
+        pd.concat([test_ori, test_top1, test_top2])
+        .drop_duplicates(subset=["Trip_id", "Destination"])
+        .reset_index(drop=True)
+    )
+    test = merge_zone_feat(test, feat_df)
     test.to_csv("test.csv", index=False)
-    feat_df.to_csv("zone_features.csv", index=False)
